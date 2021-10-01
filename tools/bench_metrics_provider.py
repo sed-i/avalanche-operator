@@ -1,21 +1,49 @@
-from prometheus_client import start_http_server, Histogram, Summary
+#!/usr/bin/env python3
+
+from prometheus_client import start_http_server, Histogram, Summary, Enum, Gauge
 import subprocess
+import psutil
 import time
 import yaml
 import json
 
+import urllib.error
+import urllib.parse
+import urllib.request
+
 # Create a metric to track time spent and requests made.
 REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
+cpu_percent = Gauge('cpu_percent', 'CPU %')
+vmem_percent = Gauge('vmem_percent', "Virtual memory %")
+smem_percent = Gauge('smem_percent', "Swap memory %")
+scrape_duration = Gauge('scrape_duration', 'Scrape duration')
 
-scrape_duration = Histogram(
-    'scrape_duration',
-    'Scrape duration',
-    buckets=(.01, .05, .1, .5, 1.0, 2.5, 5.0, 7.5, 10.0, 20.0, float("inf"))
-)
+prom_scraped_avalanche_successfully = Enum(
+    'prom_scraped_avalanche_successfully',
+    'Prom scraped avalanche successfully',
+    states=['yes', 'no'])
 
 
 def get_stdout(args: list):
     return subprocess.run(args, stdout=subprocess.PIPE).stdout.decode('utf-8')
+
+
+def get_json_from_url(url: str, timeout: float = 2.0) -> dict:
+    """Send a GET request with a timeout.
+
+    Args:
+        url: target url to GET from
+        timeout: duration in seconds after which to return, regardless the result
+
+    Raises:
+        AlertmanagerBadResponse: If no response or invalid response, regardless the reason.
+    """
+    try:
+        response = urllib.request.urlopen(url, data=None, timeout=timeout)
+        if response.code == 200 and response.reason == "OK":
+            return json.loads(response.read())
+    except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
+        return {}
 
 
 def get_prom_address(unit="prometheus/0"):
@@ -25,21 +53,47 @@ def get_prom_address(unit="prometheus/0"):
 
 def get_scrape_duration():
     targets_url = f"http://{get_prom_address()}:9090/api/v1/targets"
-    tagets_info = json.loads(get_stdout(["curl", "--no-progress-meter", targets_url]))
-    ours = list(filter(lambda target: target["discoveredLabels"]["__address__"] == "192.168.1.101:9001", tagets_info["data"]["activeTargets"]))
+    targets_info = get_json_from_url(targets_url)  # json.loads(get_stdout(["curl", "--no-progress-meter", targets_url]))
+    ours = list(filter(lambda target: target["discoveredLabels"]["__address__"] == "192.168.1.101:9001", targets_info["data"]["activeTargets"]))
+    prom_scraped_avalanche_successfully.state("yes" if ours[0]["health"] == "up" else "no")
     return ours[0]["lastScrapeDuration"]
+
+
+def get_scrape_interval() -> int:
+    config_url = f"http://{get_prom_address()}:9090/api/v1/status/config"
+    config_info = get_json_from_url(config_url)  # json.loads(get_stdout(["curl", "--no-progress-meter", config_url]))
+    config_info = yaml.safe_load(config_info["data"]["yaml"])
+    ours = list(
+        filter(lambda scrape_config: scrape_config["static_configs"][0]["targets"] == ["192.168.1.101:9001"],
+               config_info["scrape_configs"]))
+    as_str = ours[0]["scrape_interval"]
+    as_int = int(as_str[:-1])  # assuming it is always "10s" etc.
+    return as_int
 
 
 # Decorate function with metric.
 @REQUEST_TIME.time()
 def process_metrics():
-    scrape_duration.observe(get_scrape_duration())
+    try:
+        scrape_duration.set(get_scrape_duration())
+    except:
+        prom_scraped_avalanche_successfully.state("no")
+
+
+def process_sys_metrics():
+    cpu_percent.set(psutil.cpu_percent())
+    vmem_percent.set(psutil.virtual_memory().percent)
+    smem_percent.set(psutil.swap_memory().percent)
 
 
 if __name__ == '__main__':
     # Start up the server to expose the metrics.
     start_http_server(8000)
-    # Generate some requests.
+
+    scrape_interval = get_scrape_interval()
     while True:
-        process_metrics()
-        time.sleep(10.0)
+        process_sys_metrics()
+        if not int(time.time()) % scrape_interval:
+            process_metrics()
+            scrape_interval = get_scrape_interval()
+        time.sleep(1)
