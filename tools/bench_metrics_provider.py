@@ -6,6 +6,7 @@ import psutil
 import time
 import yaml
 import json
+from collections import deque
 
 import urllib.error
 import urllib.parse
@@ -13,11 +14,13 @@ import urllib.request
 
 # Create a metric to track time spent and requests made.
 REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
+cpu_avg = deque(maxlen=10)
 cpu_percent = Gauge('cpu_percent', 'CPU %')
 vmem_percent = Gauge('vmem_percent', "Virtual memory %")
 smem_percent = Gauge('smem_percent', "Swap memory %")
 scrape_duration = Gauge('scrape_duration', 'Scrape duration')
 scrape_duration_percent = Gauge('scrape_duration_percent', 'Scrape duration %')
+scrape_interval = Gauge('scrape_interval', 'Scrape interval')
 
 prom_scraped_avalanche_successfully = Gauge(
     'prom_scraped_avalanche_successfully',
@@ -72,7 +75,8 @@ def get_scrape_interval() -> int:
 
 
 def process_sys_metrics():
-    cpu_percent.set(psutil.cpu_percent())
+    cpu_avg.append(psutil.cpu_percent())
+    cpu_percent.set(sum(cpu_avg)/len(cpu_avg))
     vmem_percent.set(psutil.virtual_memory().percent)
     smem_percent.set(psutil.swap_memory().percent)
 
@@ -84,7 +88,7 @@ if __name__ == '__main__':
     while True:
         print("Trying to comm with prom...")
         try:
-            scrape_interval = get_scrape_interval()
+            si = get_scrape_interval()
             print("Success.")
             break
         except:
@@ -92,13 +96,14 @@ if __name__ == '__main__':
 
     while True:
         process_sys_metrics()
-        if not int(time.time()) % scrape_interval:
+        if not int(time.time()) % si:
             try:
                 with REQUEST_TIME.time():
                     sd = get_scrape_duration()
-                    scrape_interval = get_scrape_interval()
+                    si = get_scrape_interval()
                     scrape_duration.set(sd)
-                    scrape_duration_percent.set(sd/scrape_interval * 100)
+                    scrape_interval.set(si)
+                    scrape_duration_percent.set(sd/si * 100)
             except:
                 prom_scraped_avalanche_successfully.set(0)
 
