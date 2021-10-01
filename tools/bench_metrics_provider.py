@@ -104,7 +104,7 @@ def process_sys_metrics():
     smem_percent.set(sm.percent)
     smem_gb.set(sm.used / 1e9)
 
-    disk = psutil.disk_usage("/var/lib/prometheus")
+    disk = psutil.disk_usage(".")
     disk_percent.set(disk.percent)
     disk_gb.set(disk.used / 1e9)
 
