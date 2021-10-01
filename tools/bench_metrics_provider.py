@@ -17,11 +17,11 @@ cpu_percent = Gauge('cpu_percent', 'CPU %')
 vmem_percent = Gauge('vmem_percent', "Virtual memory %")
 smem_percent = Gauge('smem_percent', "Swap memory %")
 scrape_duration = Gauge('scrape_duration', 'Scrape duration')
+scrape_duration_percent = Gauge('scrape_duration_percent', 'Scrape duration %')
 
-prom_scraped_avalanche_successfully = Enum(
+prom_scraped_avalanche_successfully = Gauge(
     'prom_scraped_avalanche_successfully',
-    'Prom scraped avalanche successfully',
-    states=['yes', 'no'])
+    'Prom scraped avalanche successfully')
 
 
 def get_stdout(args: list):
@@ -55,7 +55,7 @@ def get_scrape_duration():
     targets_url = f"http://{get_prom_address()}:9090/api/v1/targets"
     targets_info = get_json_from_url(targets_url)  # json.loads(get_stdout(["curl", "--no-progress-meter", targets_url]))
     ours = list(filter(lambda target: target["discoveredLabels"]["__address__"] == "192.168.1.101:9001", targets_info["data"]["activeTargets"]))
-    prom_scraped_avalanche_successfully.state("yes" if ours[0]["health"] == "up" else "no")
+    prom_scraped_avalanche_successfully.set(int(ours[0]["health"] == "up"))
     return ours[0]["lastScrapeDuration"]
 
 
@@ -71,15 +71,6 @@ def get_scrape_interval() -> int:
     return as_int
 
 
-# Decorate function with metric.
-@REQUEST_TIME.time()
-def process_metrics():
-    try:
-        scrape_duration.set(get_scrape_duration())
-    except:
-        prom_scraped_avalanche_successfully.state("no")
-
-
 def process_sys_metrics():
     cpu_percent.set(psutil.cpu_percent())
     vmem_percent.set(psutil.virtual_memory().percent)
@@ -90,10 +81,25 @@ if __name__ == '__main__':
     # Start up the server to expose the metrics.
     start_http_server(8000)
 
-    scrape_interval = get_scrape_interval()
+    while True:
+        print("Trying to comm with prom...")
+        try:
+            scrape_interval = get_scrape_interval()
+            print("Success.")
+            break
+        except:
+            time.sleep(2)
+
     while True:
         process_sys_metrics()
         if not int(time.time()) % scrape_interval:
-            process_metrics()
-            scrape_interval = get_scrape_interval()
+            try:
+                with REQUEST_TIME.time():
+                    sd = get_scrape_duration()
+                    scrape_interval = get_scrape_interval()
+                    scrape_duration.set(sd)
+                    scrape_duration_percent.set(sd/scrape_interval * 100)
+            except:
+                prom_scraped_avalanche_successfully.set(0)
+
         time.sleep(1)
