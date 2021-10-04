@@ -98,8 +98,11 @@ def get_scrape_interval() -> int:
 def get_prom_disk_usage() -> int:
     args = ['microk8s.kubectl', 'exec', '-n', JUJU_MODEL, 'prometheus-0', '-c', 'prometheus', '--',
             'du', '--max-depth=0', '/var/lib/prometheus']
-    s = get_stdout(args)
-    return int(s.split()[0])
+    try:
+        s = get_stdout(args)
+        return int(s.split()[0])
+    except:
+        return 0
 
 
 def process_sys_metrics():
