@@ -95,14 +95,15 @@ def get_scrape_interval() -> int:
     return as_int
 
 
-def get_prom_disk_usage() -> int:
+def get_prom_disk_usage() -> float:
+    """Return size of prom folder, in GB, if kubectl succeeded; NaN otherwise."""
     args = ['microk8s.kubectl', 'exec', '-n', JUJU_MODEL, 'prometheus-0', '-c', 'prometheus', '--',
             'du', '--max-depth=0', '/var/lib/prometheus']
     try:
         s = get_stdout(args)
-        return int(s.split()[0])
+        return int(s.split()[0]) / 1e6
     except:
-        return 0
+        return float("nan")
 
 
 def process_sys_metrics():
@@ -121,7 +122,7 @@ def process_sys_metrics():
     # disk_percent.set(disk.percent)
     # disk_gb.set(disk.used / 1e9)
 
-    prom_disk_usage = get_prom_disk_usage() / 1e6  # in GB
+    prom_disk_usage = get_prom_disk_usage()  # in GB
     disk_gb.set(prom_disk_usage)
     disk_percent.set(prom_disk_usage / (disk.total / 1e9))
 
