@@ -44,6 +44,9 @@ def get_stdout(args: list):
     return subprocess.run(args, stdout=subprocess.PIPE).stdout.decode('utf-8')
 
 
+JUJU_MODEL = json.loads(get_stdout(['juju', 'models', '--format=json']))['current-model']
+
+
 def get_json_from_url(url: str, timeout: float = 2.0) -> dict:
     """Send a GET request with a timeout.
 
@@ -92,6 +95,13 @@ def get_scrape_interval() -> int:
     return as_int
 
 
+def get_prom_disk_usage() -> int:
+    args = ['microk8s.kubectl', 'exec', '-n', JUJU_MODEL, 'prometheus-0', '-c', 'prometheus', '--',
+            'du', '--max-depth=0', '/var/lib/prometheus']
+    s = get_stdout(args)
+    return int(s.split()[0])
+
+
 def process_sys_metrics():
     cpu_avg.append(psutil.cpu_percent())
     cpu_percent.set(sum(cpu_avg)/len(cpu_avg))
@@ -105,8 +115,12 @@ def process_sys_metrics():
     smem_gb.set(sm.used / 1e9)
 
     disk = psutil.disk_usage(".")
-    disk_percent.set(disk.percent)
-    disk_gb.set(disk.used / 1e9)
+    # disk_percent.set(disk.percent)
+    # disk_gb.set(disk.used / 1e9)
+
+    prom_disk_usage = get_prom_disk_usage() / 1e6  # in GB
+    disk_gb.set(prom_disk_usage)
+    disk_percent.set(prom_disk_usage / (disk.total / 1e9))
 
 
 if __name__ == '__main__':
