@@ -152,5 +152,8 @@ if __name__ == '__main__':
                     scrape_duration_percent.set(sd/si * 100)
             except:
                 prom_scrape_avalanche_up.set(0)
+                scrape_duration_sec.set(float("nan"))
+                scrape_interval_sec.set(float("nan"))
+                scrape_duration_percent.set(float("nan"))
 
         time.sleep(1)
