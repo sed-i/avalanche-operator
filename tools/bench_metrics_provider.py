@@ -17,7 +17,6 @@ import urllib.request
 # _up
 
 # Create a metric to track time spent and requests made.
-REQUEST_TIME = Summary('request_processing_sec', 'Time spent processing request')
 cpu_avg = deque(maxlen=10)
 cpu_percent = Gauge('cpu_percent', 'CPU %')
 vmem_percent = Gauge('vmem_percent', "Virtual memory %")
@@ -26,6 +25,8 @@ disk_percent = Gauge('disk_percent', "Disk %")
 scrape_duration_sec = Gauge('scrape_duration_sec', 'Scrape duration')
 scrape_duration_percent = Gauge('scrape_duration_percent', 'Scrape duration %')
 scrape_interval_sec = Gauge('scrape_interval_sec', 'Scrape interval')
+
+prom_api_req_sec = Gauge('prom_api_req_sec', 'Prom API server response time')
 
 prom_scrape_avalanche_up = Gauge(
     'prom_scrape_avalanche_up',
@@ -47,7 +48,7 @@ def get_stdout(args: list):
 JUJU_MODEL = json.loads(get_stdout(['juju', 'models', '--format=json']))['current-model']
 
 
-def get_json_from_url(url: str, timeout: float = 2.0) -> dict:
+def get_json_from_url(url: str, timeout: float = 5.0) -> dict:
     """Send a GET request with a timeout.
 
     Args:
@@ -144,14 +145,16 @@ if __name__ == '__main__':
         process_sys_metrics()
         if not int(time.time()) % si:
             try:
-                with REQUEST_TIME.time():
+                with prom_api_req_sec.time():
                     sd = get_scrape_duration()
                     si = get_scrape_interval()
-                    scrape_duration_sec.set(sd)
-                    scrape_interval_sec.set(si)
-                    scrape_duration_percent.set(sd/si * 100)
+
+                scrape_duration_sec.set(sd)
+                scrape_interval_sec.set(si)
+                scrape_duration_percent.set(sd/si * 100)
             except:
                 prom_scrape_avalanche_up.set(0)
+                prom_api_req_sec.set(float("nan"))
                 scrape_duration_sec.set(float("nan"))
                 scrape_interval_sec.set(float("nan"))
                 scrape_duration_percent.set(float("nan"))
