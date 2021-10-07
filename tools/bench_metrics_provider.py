@@ -145,10 +145,12 @@ if __name__ == '__main__':
         process_sys_metrics()
         if not int(time.time()) % si:
             try:
-                with prom_api_req_sec.time():
-                    sd = get_scrape_duration()
-                    si = get_scrape_interval()
-
+                tic = time.time()
+                sd = get_scrape_duration()
+                si = get_scrape_interval()
+                toc = time.time()
+                prom_api_req_sec.set((toc - tic) / 2)
+                
                 scrape_duration_sec.set(sd)
                 scrape_interval_sec.set(si)
                 scrape_duration_percent.set(sd/si * 100)
