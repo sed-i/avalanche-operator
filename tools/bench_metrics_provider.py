@@ -89,9 +89,9 @@ def get_scrape_interval() -> int:
     config_info = get_json_from_url(config_url)  # json.loads(get_stdout(["curl", "--no-progress-meter", config_url]))
     config_info = yaml.safe_load(config_info["data"]["yaml"])
     ours = list(
-        filter(lambda scrape_config: scrape_config["static_configs"][0]["targets"] == ["192.168.1.101:9001"],
+        filter(lambda scrape_config: set(scrape_config["static_configs"][0]["targets"]) >= {"192.168.1.101:9001"},
                config_info["scrape_configs"]))
-    as_str = ours[0]["scrape_interval"]
+    as_str = sum([itm["scrape_interval"] for itm in ours])/len(ours)
     as_int = int(as_str[:-1])  # assuming it is always "10s" etc.
     return as_int
 
@@ -150,7 +150,7 @@ if __name__ == '__main__':
                 si = get_scrape_interval()
                 toc = time.time()
                 prom_api_req_sec.set((toc - tic) / 2)
-                
+
                 scrape_duration_sec.set(sd)
                 scrape_interval_sec.set(si)
                 scrape_duration_percent.set(sd/si * 100)
