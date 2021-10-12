@@ -93,6 +93,8 @@ def get_scrape_interval() -> int:
                config_info["scrape_configs"]))
     as_str = sum([itm["scrape_interval"] for itm in ours])/len(ours)
     as_int = int(as_str[:-1])  # assuming it is always "10s" etc.
+    if as_str[-1] == 'm':
+        as_int *= 60
     return as_int
 
 
