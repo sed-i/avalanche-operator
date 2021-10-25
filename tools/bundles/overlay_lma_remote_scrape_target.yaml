@@ -6,15 +6,15 @@ applications:
     trust: true
     channel: edge
     options:
-      targets: 192.168.1.101:9001
+    targets: 10.128.0.2:9001,10.128.0.2:9002,10.128.0.2:9003,10.128.0.2:9004,10.128.0.2:9005,10.128.0.2:9006,10.128.0.2:9007,10.128.0.2:9008
   scrape-config:
     charm: prometheus-scrape-config-k8s
     scale: 1
     trust: true
     channel: edge
     options:
-      scrape-interval: 30s
-      scrape-timeout: 20s
+      scrape-interval: 60s
+      scrape-timeout: 55s
 
 relations:
 - - scrape-target:metrics-endpoint
