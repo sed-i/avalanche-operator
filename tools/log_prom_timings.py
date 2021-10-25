@@ -12,6 +12,9 @@ import urllib.request
 import syslog
 from typing import Tuple
 
+from pathlib import Path
+
+
 
 def get_stdout(args: list):
     return subprocess.run(args, stdout=subprocess.PIPE).stdout.decode('utf-8')
@@ -184,6 +187,10 @@ def get_prom_address(unit="prometheus/0") -> str:
 #   }
 # }
 
+def prom_dir_size(path="/var/snap/microk8s") -> float:
+    root_directory = Path(path)
+    return sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file()) / 1e6  # in MB
+
 if __name__ == '__main__':
     targets_url = f"http://{get_prom_address()}:9090/api/v1/targets"
 
@@ -200,6 +207,7 @@ if __name__ == '__main__':
         # print(response_time, sorted(scrapeDurations))
         syslog_msg = f"scrapeDuration: {response_time} {sorted(scrapeDurations)}"
         syslog.syslog(syslog_msg)
+        syslog.syslog(f"prom_dir_size={prom_dir_size()}")
 
         if error_count * period >= 2 * 60:  # more than 2 minutes
             try:
